@@ -39,7 +39,7 @@ const CreatePage = () => {
     setIsProcessing(true);
     
     // PONES TU CLAVE AQUÍ ABAJO (Manten las comillas):
-    const apiKey = "PON_AQUI_TU_API_KEY_DE_GOOGLE";
+    const apiKey = "AIzaSyB6qxAoJtXleLIG0Y5tu-cNBjaZUKi3S7Q";
 
     try {
       let requestBody;

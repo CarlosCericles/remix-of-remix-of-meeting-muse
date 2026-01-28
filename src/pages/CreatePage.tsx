@@ -37,7 +37,7 @@ const CreatePage = () => {
     }
 
     setIsProcessing(true);
-    const apiKey = import.meta.env.VITE_GOOGLE_AI_KEY;
+   const apiKey = "AIzaSyB6qxAoJtXleLIG0Y5tu-cNBjaZUKi3S7Q";
 
     try {
       let requestBody;

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Sparkles, Loader2, FileAudio, FileText } from 'lucide-react';
+import { Sparkles, Loader2, FileAudio } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 
@@ -37,14 +37,16 @@ const CreatePage = () => {
     }
 
     setIsProcessing(true);
-   const apiKey = "AIzaSyB6qxAoJtXleLIG0Y5tu-cNBjaZUKi3S7Q";
+    
+    // PONES TU CLAVE AQUÍ ABAJO (Manten las comillas):
+    const apiKey = "PON_AQUI_TU_API_KEY_DE_GOOGLE";
 
     try {
       let requestBody;
       const prompt = "Actúa como profesor de Preply. Crea un resumen PDF: 1. Gramática, 2. Vocabulario, 3. Errores y correcciones, 4. Tarea.";
 
       if (audioFile) {
-        toast.info("Procesando audio (máx 1 min)...");
+        toast.info("Procesando audio...");
         const base64Audio = await fileToBase64(audioFile);
         requestBody = {
           contents: [{
@@ -78,7 +80,7 @@ const CreatePage = () => {
       
     } catch (error) {
       console.error(error);
-      toast.error('Error al generar el PDF. Revisa la API Key.');
+      toast.error('Error. Revisa que la API Key sea correcta.');
     } finally {
       setIsProcessing(false);
     }
@@ -91,5 +93,5 @@ const CreatePage = () => {
       </section>
 
       <section className="max-w-3xl mx-auto space-y-6">
-        <div className="glass-card p-6 glow-border space-y-4">
-          <Label htmlFor="audio-upload" className="flex flex-col items-center justify-center border
+        <div className="glass-card p-6 glow-border space-y-4 border rounded-xl bg-card">
+          <Label htmlFor="audio-upload" className="flex flex-col items-center justify-center border-2 border-dashed rounded-xl

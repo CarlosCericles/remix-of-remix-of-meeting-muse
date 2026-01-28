@@ -1,44 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Upload, Sparkles, Loader2, Zap, FileAudio, FileText } from 'lucide-react';
-import { toast } from 'sonner';
-import { jsPDF } from 'jspdf';
-
-const CreatePage = () => {
-  const [content, setContent] = useState('');
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const heroRef = useRef<HTMLDivElement>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.type.startsWith('audio/')) {
-      setAudioFile(file);
-      setContent('');
-      toast.success(`Audio detectado: ${file.name}`);
-    } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-      file.text().then(text => setContent(text));
-      setAudioFile(null);
-      toast.success('Texto cargado');
-    }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => 
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve((reader.result as string).split(',')[1]);
-      reader.onerror = reject;
-    });
-
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
     if (!content.trim() && !audioFile) {
-      toast.error('Por favor, sube un audio o pega el texto de la clase');
+      toast.error('Sube un audio o pega el texto');
       return;
     }
 
@@ -47,7 +9,8 @@ const CreatePage = () => {
 
     try {
       let requestBody;
-      const prompt = "Actúa como un profesor experto. Crea un resumen de clase profesional en español. Incluye: 1. Título dinámico, 2. Conceptos clave discutidos, 3. Vocabulario nuevo con definiciones, 4. Ejercicios breves de repaso para el alumno. Formatea todo para que quede bien en un PDF.";
+      // Prompt optimizado para clases largas de Preply
+      const prompt = "Analiza estos 50 minutos de clase de idiomas. Genera un PDF de repaso para el alumno con: 1. Resumen de la gramática vista. 2. Lista de vocabulario nuevo con traducción al español. 3. Errores comunes que el alumno cometió y sus correcciones. 4. Tarea personalizada para la próxima sesión.";
 
       if (audioFile) {
         const base64Audio = await fileToBase64(audioFile);
@@ -61,9 +24,12 @@ const CreatePage = () => {
         };
       } else {
         requestBody = {
-          contents: [{ parts: [{ text: `${prompt} Basado en este texto: ${content}` }] }]
+          contents: [{ parts: [{ text: `${prompt} Texto: ${content}` }] }]
         };
       }
+
+      // Añadimos un aviso de paciencia para clases largas
+      toast.info("Procesando 50 min de audio... Esto puede tardar hasta un minuto.", { duration: 10000 });
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -71,71 +37,22 @@ const CreatePage = () => {
         body: JSON.stringify(requestBody)
       });
 
+      if (!response.ok) throw new Error('El archivo es demasiado grande o la API falló');
+
       const data = await response.json();
       const resultText = data.candidates[0].content.parts[0].text;
 
       const doc = new jsPDF();
       const splitText = doc.splitTextToSize(resultText, 180);
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.text(splitText, 15, 20);
-      doc.save(`Repaso_Clase_${new Date().toLocaleDateString()}.pdf`);
-      toast.success('¡Resumen PDF generado!');
+      doc.save(`Resumen_Clase_Larga_${new Date().getTime()}.pdf`);
+      toast.success('¡PDF de 50 min generado con éxito!');
       
     } catch (error) {
       console.error(error);
-      toast.error('Error al procesar. Verifica el tamaño del audio o la API Key.');
+      toast.error('Error: El audio es muy pesado. Intenta grabarlo en menor calidad o convertirlo a MP3 pequeño.');
     } finally {
       setIsProcessing(false);
     }
   };
-
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <section className="py-20 px-4 text-center">
-        <h1 className="text-5xl font-bold mb-4 gradient-text">Material de Repaso Preply</h1>
-        <p className="text-muted-foreground max-w-2xl mx-auto">
-          Sube la grabación de tu clase o pega el chat para generar un PDF de estudio automático.
-        </p>
-      </section>
-
-      <section className="max-w-3xl mx-auto px-4 pb-20">
-        <div className="glass-card p-8 glow-border space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Label htmlFor="audio-upload" className="flex flex-col items-center justify-center border-2 border-dashed border-primary/30 rounded-xl p-6 cursor-pointer hover:bg-primary/5 transition-all">
-              <FileAudio className="w-10 h-10 mb-2 text-primary" />
-              <span className="text-sm font-medium">Subir Audio Clase</span>
-              <Input id="audio-upload" type="file" accept="audio/*" onChange={handleFileChange} className="hidden" />
-              {audioFile && <span className="text-xs mt-2 text-accent">{audioFile.name}</span>}
-            </Label>
-            
-            <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-6 opacity-50">
-              <FileText className="w-10 h-10 mb-2" />
-              <span className="text-sm font-medium">Texto detectado</span>
-            </div>
-          </div>
-
-          <Textarea 
-            placeholder="O pega el transcript aquí..."
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="min-h-[200px] bg-secondary/20"
-          />
-
-          <Button 
-            className="w-full h-14 text-lg font-bold" 
-            onClick={handleSubmit} 
-            disabled={isProcessing}
-          >
-            {isProcessing ? (
-              <><Loader2 className="animate-spin mr-2" /> Procesando con IA...</>
-            ) : (
-              <><Sparkles className="mr-2" /> Generar Resumen PDF</>
-            )}
-          </Button>
-        </div>
-      </section>
-    </div>
-  );
-};
-
-export default CreatePage;

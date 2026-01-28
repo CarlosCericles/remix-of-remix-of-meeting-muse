@@ -1,82 +1,95 @@
-const handleSubmit = async () => {
-  if (!content.trim() && !audioFile) {
-    toast.error('Sube un audio o pega el chat de la clase');
-    return;
-  }
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Sparkles, Loader2, FileAudio, FileText } from 'lucide-react';
+import { toast } from 'sonner';
+import { jsPDF } from 'jspdf';
 
-  setIsProcessing(true);
-  
-  // 1. Validamos la Key antes de disparar
-  const apiKey = import.meta.env.VITE_GOOGLE_AI_KEY;
-  
-  if (!apiKey || apiKey === "undefined") {
-    console.error("ERROR: VITE_GOOGLE_AI_KEY no detectada. Revisa Vercel Settings y haz Redeploy.");
-    toast.error("Error de configuración: API Key no encontrada.");
-    setIsProcessing(false);
-    return;
-  }
+const CreatePage = () => {
+  const [content, setContent] = useState('');
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  try {
-    let requestBody;
-    const prompt = "Actúa como un profesor de Preply. Analiza el contenido de la clase y genera un PDF de repaso en español que incluya: 1. Título dinámico. 2. Resumen de gramática. 3. Vocabulario nuevo. 4. Errores detectados y su corrección. 5. Tarea. Usa un tono motivador.";
-
-    if (audioFile) {
-      toast.info("Procesando audio... Esto puede tardar hasta 1 minuto para clases largas.", { duration: 8000 });
-      const base64Audio = await fileToBase64(audioFile);
-      requestBody = {
-        contents: [{
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: audioFile.type, data: base64Audio } }
-          ]
-        }]
-      };
-    } else {
-      requestBody = {
-        contents: [{ parts: [{ text: `${prompt} Texto de la clase: ${content}` }] }]
-      };
-    }
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
+  const fileToBase64 = (file: File): Promise<string> => 
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
+      reader.onerror = reject;
     });
 
-    // 2. Si Google responde error, lo capturamos aquí
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Error de Google API:", errorData);
-      throw new Error(errorData.error?.message || 'Error en la API de Google');
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type.startsWith('audio/')) {
+      setAudioFile(file);
+      setContent('');
+      toast.success(`Audio detectado: ${file.name}`);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!content.trim() && !audioFile) {
+      toast.error('Sube un audio o pega el texto');
+      return;
     }
 
-    const data = await response.json();
-    
-    // 3. Validamos que la respuesta tenga contenido
-    if (!data.candidates || !data.candidates[0].content.parts[0].text) {
-      throw new Error('La IA no pudo generar una respuesta clara.');
+    setIsProcessing(true);
+    const apiKey = import.meta.env.VITE_GOOGLE_AI_KEY;
+
+    try {
+      let requestBody;
+      const prompt = "Actúa como profesor de Preply. Crea un resumen PDF: 1. Gramática, 2. Vocabulario, 3. Errores y correcciones, 4. Tarea.";
+
+      if (audioFile) {
+        toast.info("Procesando audio (máx 1 min)...");
+        const base64Audio = await fileToBase64(audioFile);
+        requestBody = {
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: audioFile.type, data: base64Audio } }
+            ]
+          }]
+        };
+      } else {
+        requestBody = {
+          contents: [{ parts: [{ text: `${prompt} Texto: ${content}` }] }]
+        };
+      }
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      const data = await response.json();
+      const resultText = data.candidates[0].content.parts[0].text;
+
+      const doc = new jsPDF();
+      const splitText = doc.splitTextToSize(resultText, 180);
+      doc.setFontSize(11);
+      doc.text(splitText, 15, 20);
+      doc.save(`Repaso_Preply_${new Date().getTime()}.pdf`);
+      toast.success('¡PDF generado!');
+      
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al generar el PDF. Revisa la API Key.');
+    } finally {
+      setIsProcessing(false);
     }
+  };
 
-    const resultText = data.candidates[0].content.parts[0].text;
+  return (
+    <div className="min-h-screen bg-background text-foreground p-4">
+      <section className="py-10 text-center">
+        <h1 className="text-4xl font-bold mb-4 gradient-text">Material Preply</h1>
+      </section>
 
-    // Generación del PDF
-    const doc = new jsPDF();
-    const splitText = doc.splitTextToSize(resultText, 180);
-    doc.setFontSize(11);
-    doc.text(splitText, 15, 20);
-    doc.save(`Material_Repaso_Preply_${new Date().getTime()}.pdf`);
-    
-    toast.success('¡Material de repaso generado!');
-    
-  } catch (error: any) {
-    console.error("Detalle del error:", error);
-    toast.error(`Error: ${error.message || 'El audio es demasiado pesado o la conexión falló'}`);
-  } finally {
-    setIsProcessing(false);
-  }
-};
-</div>
-  );
-};
-
-export default CreatePage;
+      <section className="max-w-3xl mx-auto space-y-6">
+        <div className="glass-card p-6 glow-border space-y-4">
+          <Label htmlFor="audio-upload" className="flex flex-col items-center justify-center border

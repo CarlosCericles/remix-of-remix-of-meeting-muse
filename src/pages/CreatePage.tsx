@@ -75,3 +75,8 @@ const handleSubmit = async () => {
     setIsProcessing(false);
   }
 };
+</div>
+  );
+};
+
+export default CreatePage;

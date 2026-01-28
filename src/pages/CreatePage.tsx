@@ -1,49 +1,44 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Upload, Sparkles, Loader2, Zap } from 'lucide-react';
+import { Upload, Sparkles, Loader2, Zap, FileAudio, FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { jsPDF } from 'jspdf';
 
 const CreatePage = () => {
-  const navigate = useNavigate();
-  const [transcript, setTranscript] = useState('');
+  const [content, setContent] = useState('');
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const heroRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (heroRef.current) {
-        const rect = heroRef.current.getBoundingClientRect();
-        const x = (e.clientX - rect.left - rect.width / 2) / rect.width;
-        const y = (e.clientY - rect.top - rect.height / 2) / rect.height;
-        setMousePosition({ x, y });
-      }
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-      const text = await file.text();
-      setTranscript(text);
-      toast.success('Archivo cargado');
-    } else {
-      toast.error('Usa archivos .txt o pega el texto');
+
+    if (file.type.startsWith('audio/')) {
+      setAudioFile(file);
+      setContent('');
+      toast.success(`Audio detectado: ${file.name}`);
+    } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+      file.text().then(text => setContent(text));
+      setAudioFile(null);
+      toast.success('Texto cargado');
     }
   };
 
+  const fileToBase64 = (file: File): Promise<string> => 
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
+      reader.onerror = reject;
+    });
+
   const handleSubmit = async () => {
-    if (!transcript.trim()) {
-      toast.error('Pega el texto de tu clase');
+    if (!content.trim() && !audioFile) {
+      toast.error('Por favor, sube un audio o pega el texto de la clase');
       return;
     }
 
@@ -51,67 +46,92 @@ const CreatePage = () => {
     const apiKey = import.meta.env.VITE_GOOGLE_AI_KEY;
 
     try {
+      let requestBody;
+      const prompt = "Actúa como un profesor experto. Crea un resumen de clase profesional en español. Incluye: 1. Título dinámico, 2. Conceptos clave discutidos, 3. Vocabulario nuevo con definiciones, 4. Ejercicios breves de repaso para el alumno. Formatea todo para que quede bien en un PDF.";
+
+      if (audioFile) {
+        const base64Audio = await fileToBase64(audioFile);
+        requestBody = {
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: audioFile.type, data: base64Audio } }
+            ]
+          }]
+        };
+      } else {
+        requestBody = {
+          contents: [{ parts: [{ text: `${prompt} Basado en este texto: ${content}` }] }]
+        };
+      }
+
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ 
-            parts: [{ 
-              text: `Actúa como un profesor experto. Crea una lección educativa: 1. Título, 2. Objetivos, 3. Vocabulario, 4. Resumen, 5. Ejercicios. Texto: ${transcript}` 
-            }] 
-          }]
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const data = await response.json();
-      const content = data.candidates[0].content.parts[0].text;
+      const resultText = data.candidates[0].content.parts[0].text;
 
       const doc = new jsPDF();
-      const splitText = doc.splitTextToSize(content, 180);
+      const splitText = doc.splitTextToSize(resultText, 180);
+      doc.setFontSize(12);
       doc.text(splitText, 15, 20);
-      doc.save(`Clase_Preply_${new Date().getTime()}.pdf`);
-      toast.success('¡PDF descargado!');
+      doc.save(`Repaso_Clase_${new Date().toLocaleDateString()}.pdf`);
+      toast.success('¡Resumen PDF generado!');
       
     } catch (error) {
-      toast.error('Error con la IA. Revisa tu API Key.');
+      console.error(error);
+      toast.error('Error al procesar. Verifica el tamaño del audio o la API Key.');
     } finally {
       setIsProcessing(false);
     }
   };
 
   return (
-    <div className="min-h-screen relative bg-background">
-      <section ref={heroRef} className="relative min-h-[40vh] flex items-center justify-center overflow-hidden">
-        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
-          <div className="animate-fade-in-down inline-flex items-center gap-2 px-4 py-2 rounded-full glass-subtle mb-8">
-            <Zap className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-muted-foreground">Preply AI Assistant</span>
-          </div>
-          <h1 className="text-4xl md:text-6xl font-bold mb-6">De texto a <span className="gradient-text">PDF</span></h1>
-        </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <section className="py-20 px-4 text-center">
+        <h1 className="text-5xl font-bold mb-4 gradient-text">Material de Repaso Preply</h1>
+        <p className="text-muted-foreground max-w-2xl mx-auto">
+          Sube la grabación de tu clase o pega el chat para generar un PDF de estudio automático.
+        </p>
       </section>
 
-      <section className="relative py-10 px-4">
-        <div className="max-w-3xl mx-auto">
-          <div className="glass-card p-8 glow-border">
-            <div className="space-y-6">
-              <Label htmlFor="file-upload" className="cursor-pointer block border-2 border-dashed border-border/50 rounded-2xl p-6 text-center hover:bg-primary/5 transition-all">
-                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                <p>Carga .txt o pega abajo</p>
-                <Input id="file-upload" type="file" onChange={handleFileUpload} className="hidden" />
-              </Label>
-              <Textarea
-                placeholder="Pega aquí el contenido..."
-                value={transcript}
-                onChange={(e) => setTranscript(e.target.value)}
-                className="min-h-[250px] bg-secondary/30 rounded-xl"
-              />
-              <Button className="w-full h-14 bg-gradient-to-r from-primary to-accent" onClick={handleSubmit} disabled={isProcessing}>
-                {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2" />}
-                Generar PDF para Preply
-              </Button>
+      <section className="max-w-3xl mx-auto px-4 pb-20">
+        <div className="glass-card p-8 glow-border space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Label htmlFor="audio-upload" className="flex flex-col items-center justify-center border-2 border-dashed border-primary/30 rounded-xl p-6 cursor-pointer hover:bg-primary/5 transition-all">
+              <FileAudio className="w-10 h-10 mb-2 text-primary" />
+              <span className="text-sm font-medium">Subir Audio Clase</span>
+              <Input id="audio-upload" type="file" accept="audio/*" onChange={handleFileChange} className="hidden" />
+              {audioFile && <span className="text-xs mt-2 text-accent">{audioFile.name}</span>}
+            </Label>
+            
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-6 opacity-50">
+              <FileText className="w-10 h-10 mb-2" />
+              <span className="text-sm font-medium">Texto detectado</span>
             </div>
           </div>
+
+          <Textarea 
+            placeholder="O pega el transcript aquí..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="min-h-[200px] bg-secondary/20"
+          />
+
+          <Button 
+            className="w-full h-14 text-lg font-bold" 
+            onClick={handleSubmit} 
+            disabled={isProcessing}
+          >
+            {isProcessing ? (
+              <><Loader2 className="animate-spin mr-2" /> Procesando con IA...</>
+            ) : (
+              <><Sparkles className="mr-2" /> Generar Resumen PDF</>
+            )}
+          </Button>
         </div>
       </section>
     </div>

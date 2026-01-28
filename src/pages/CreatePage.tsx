@@ -37,15 +37,16 @@ const CreatePage = () => {
     }
 
     setIsProcessing(true);
-    // IMPORTANTE: Pega tu clave real aquí entre las comillas
+    
+    // PONES TU CLAVE AQUÍ ABAJO (Manten las comillas):
     const apiKey = "AIzaSyB6qxAoJtXleLIG0Y5tu-cNBjaZUKi3S7Q";
 
     try {
       let requestBody;
-      const prompt = "Actúa como profesor de Preply. Crea un resumen de clase en español con: Conceptos, Vocabulario, Errores y Tarea.";
+      const prompt = "Actúa como profesor de Preply. Crea un resumen PDF: 1. Gramática, 2. Vocabulario, 3. Errores y correcciones, 4. Tarea.";
 
       if (audioFile) {
-        toast.info("Analizando audio de la clase...");
+        toast.info("Procesando audio...");
         const base64Audio = await fileToBase64(audioFile);
         requestBody = {
           contents: [{
@@ -68,18 +69,26 @@ const CreatePage = () => {
       });
 
       const data = await response.json();
+
+      // ESTE ALERT NOS DIRÁ EL ERROR REAL SI FALLA
+      if (data.error) {
+        alert("Google dice: " + data.error.message);
+        setIsProcessing(false);
+        return;
+      }
+
       const resultText = data.candidates[0].content.parts[0].text;
 
       const doc = new jsPDF();
       const splitText = doc.splitTextToSize(resultText, 180);
       doc.setFontSize(11);
       doc.text(splitText, 15, 20);
-      doc.save(`Clase_Carlos_Rosatti_${new Date().getTime()}.pdf`);
-      toast.success('¡PDF generado con éxito!');
+      doc.save(`Repaso_Preply_${new Date().getTime()}.pdf`);
+      toast.success('¡PDF generado!');
       
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error('Error al generar. Verifica la API Key.');
+      alert("Error crítico: " + error.message);
     } finally {
       setIsProcessing(false);
     }
@@ -89,21 +98,21 @@ const CreatePage = () => {
     <div className="min-h-screen bg-black text-white p-8">
       <div className="max-w-2xl mx-auto space-y-8">
         <header className="text-center">
-          <h1 className="text-3xl font-bold text-blue-500">Material de Repaso Carlos Rosatti</h1>
-          <p className="text-gray-400">Generador de PDF para alumnos de Preply</p>
+          <h1 className="text-3xl font-bold text-blue-500">Material Carlos Rosatti</h1>
+          <p className="text-gray-400">Generador de PDF para Preply</p>
         </header>
 
         <div className="grid gap-6 border border-gray-800 p-6 rounded-2xl bg-zinc-900">
           <div className="space-y-2">
-            <Label>Paso 1: Sube el Audio de la clase (opcional)</Label>
+            <Label>Audio de la clase</Label>
             <Input type="file" accept="audio/*" onChange={handleFileChange} className="bg-zinc-800 border-zinc-700" />
-            {audioFile && <p className="text-sm text-blue-400">Archivo: {audioFile.name}</p>}
+            {audioFile && <p className="text-sm text-blue-400">{audioFile.name}</p>}
           </div>
 
           <div className="space-y-2">
-            <Label>Paso 2: O pega el texto del chat</Label>
+            <Label>O pega el texto</Label>
             <Textarea 
-              placeholder="Escribe o pega aquí..."
+              placeholder="Escribe aquí..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
               className="min-h-[150px] bg-zinc-800 border-zinc-700"
@@ -112,7 +121,7 @@ const CreatePage = () => {
 
           <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSubmit} disabled={isProcessing}>
             {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2" />}
-            Generar Material en PDF
+            Generar PDF
           </Button>
         </div>
       </div>
